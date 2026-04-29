@@ -1,0 +1,425 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Change Radar — Internal AI Rollout Simulator</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<style>
+  :root {
+    --navy: #003D6A;
+    --navy-dark: #00243F;
+    --gold: #FFD700;
+    --gold-soft: #FFF3C4;
+    --bg: #F5F7FA;
+    --card: #FFFFFF;
+    --text: #1A1A2E;
+    --text-light: #6B7280;
+    --red: #E74C3C;
+    --orange: #F39C12;
+    --green: #27AE60;
+    --radius: 12px;
+    --shadow: 0 2px 12px rgba(0,0,0,0.08);
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: var(--bg); color: var(--text); }
+
+  /* --- Header --- */
+  .header {
+    background: linear-gradient(135deg, var(--navy-dark) 0%, var(--navy) 100%);
+    color: white; padding: 2.5rem 2rem 2rem; text-align: center;
+  }
+  .header-badge {
+    display: inline-block; background: var(--gold); color: var(--navy-dark);
+    font-size: 0.65rem; font-weight: 700; letter-spacing: 1.5px; text-transform: uppercase;
+    padding: 4px 14px; border-radius: 20px; margin-bottom: 1rem;
+  }
+  .header h1 { font-size: 2.2rem; font-weight: 700; letter-spacing: -0.5px; margin-bottom: 0.4rem; }
+  .header p { font-size: 1rem; opacity: 0.8; max-width: 600px; margin: 0 auto; }
+  .header-line { width: 60px; height: 3px; background: var(--gold); margin: 1rem auto 0; border-radius: 2px; }
+
+  /* --- Container --- */
+  .container { max-width: 1100px; margin: 0 auto; padding: 0 1.5rem; }
+
+  /* --- Scenario Cards --- */
+  .scenarios { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; margin: -2rem auto 0; position: relative; z-index: 2; }
+  .scenario-card {
+    background: var(--card); border-radius: var(--radius); padding: 1.4rem;
+    box-shadow: var(--shadow); cursor: pointer; transition: all 0.25s;
+    border: 2.5px solid transparent; position: relative;
+  }
+  .scenario-card:hover { transform: translateY(-2px); box-shadow: 0 4px 20px rgba(0,0,0,0.12); }
+  .scenario-card.active { border-color: var(--gold); }
+  .scenario-card .dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; margin-right: 6px; }
+  .scenario-card h3 { font-size: 1rem; margin-bottom: 0.3rem; display: flex; align-items: center; }
+  .scenario-card .desc { font-size: 0.78rem; color: var(--text-light); line-height: 1.45; }
+  .scenario-card .adopt-num {
+    font-size: 2rem; font-weight: 800; margin-top: 0.8rem;
+    background: linear-gradient(135deg, var(--navy), var(--navy-dark));
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+  }
+  .scenario-card .adopt-label { font-size: 0.7rem; color: var(--text-light); text-transform: uppercase; letter-spacing: 0.5px; }
+
+  /* --- KPI Bar --- */
+  .kpi-bar {
+    display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem;
+    margin: 1.5rem auto;
+  }
+  .kpi-box {
+    background: var(--card); border-radius: var(--radius); padding: 1.2rem;
+    text-align: center; box-shadow: var(--shadow);
+  }
+  .kpi-box .kpi-value { font-size: 1.8rem; font-weight: 800; color: var(--navy); }
+  .kpi-box .kpi-label { font-size: 0.72rem; color: var(--text-light); text-transform: uppercase; letter-spacing: 0.5px; margin-top: 0.2rem; }
+
+  /* --- Chart Section --- */
+  .chart-section {
+    background: var(--card); border-radius: var(--radius); padding: 1.5rem;
+    box-shadow: var(--shadow); margin: 1.5rem auto;
+  }
+  .chart-section h2 { font-size: 1.1rem; margin-bottom: 1rem; color: var(--navy); }
+  .chart-wrap { position: relative; height: 320px; }
+
+  /* --- Network + Dept Grid --- */
+  .bottom-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin: 1.5rem auto; }
+  .network-section, .dept-section {
+    background: var(--card); border-radius: var(--radius); padding: 1.5rem;
+    box-shadow: var(--shadow);
+  }
+  .network-section h2, .dept-section h2 { font-size: 1.1rem; margin-bottom: 1rem; color: var(--navy); }
+  #networkCanvas { width: 100%; height: 350px; border-radius: 8px; background: #F8FAFC; }
+
+  .dept-bar-row { display: flex; align-items: center; margin-bottom: 0.5rem; }
+  .dept-bar-label { width: 140px; font-size: 0.78rem; color: var(--text-light); flex-shrink: 0; }
+  .dept-bar-track { flex: 1; height: 22px; background: #EEF0F4; border-radius: 6px; overflow: hidden; position: relative; }
+  .dept-bar-fill { height: 100%; border-radius: 6px; transition: width 0.6s ease; }
+  .dept-bar-val { position: absolute; right: 8px; top: 2px; font-size: 0.72rem; font-weight: 600; color: var(--navy); }
+
+  /* --- Insight Box --- */
+  .insight-box {
+    background: var(--gold-soft); border-left: 4px solid var(--gold);
+    border-radius: 0 var(--radius) var(--radius) 0;
+    padding: 1.2rem 1.5rem; margin: 1.5rem auto;
+    font-size: 0.88rem; line-height: 1.6; color: var(--navy-dark);
+  }
+  .insight-box strong { display: block; margin-bottom: 0.3rem; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.5px; }
+
+  /* --- Footer --- */
+  .footer {
+    text-align: center; padding: 2rem 1.5rem; margin-top: 2rem;
+    border-top: 1px solid #E5E7EB; color: var(--text-light); font-size: 0.75rem; line-height: 1.8;
+  }
+  .footer a { color: var(--navy); text-decoration: none; }
+
+  /* --- Methodology --- */
+  .method-toggle { text-align: center; margin: 1rem auto; }
+  .method-toggle button {
+    background: none; border: 1px solid var(--navy); color: var(--navy);
+    padding: 0.5rem 1.2rem; border-radius: 20px; cursor: pointer;
+    font-size: 0.8rem; transition: all 0.2s;
+  }
+  .method-toggle button:hover { background: var(--navy); color: white; }
+  .method-content {
+    display: none; background: var(--card); border-radius: var(--radius);
+    padding: 1.5rem; margin: 1rem auto; box-shadow: var(--shadow);
+    font-size: 0.82rem; line-height: 1.7; color: var(--text-light);
+  }
+  .method-content.show { display: block; }
+  .method-content h3 { color: var(--navy); margin: 1rem 0 0.3rem; font-size: 0.9rem; }
+
+  /* --- Loading --- */
+  .loading { text-align: center; padding: 4rem; color: var(--text-light); }
+
+  /* --- Mobile --- */
+  @media (max-width: 768px) {
+    .scenarios { grid-template-columns: 1fr; }
+    .kpi-bar { grid-template-columns: repeat(2, 1fr); }
+    .bottom-grid { grid-template-columns: 1fr; }
+    .header h1 { font-size: 1.6rem; }
+    .scenario-card .adopt-num { font-size: 1.6rem; }
+  }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="header-badge">Decision Support Tool</div>
+  <h1>AI Change Radar</h1>
+  <p>How should a bank roll out an internal AI tool? Compare three strategies with agent-based simulation.</p>
+  <div class="header-line"></div>
+</div>
+
+<div class="container">
+  <div class="scenarios" id="scenarioCards"></div>
+  <div class="kpi-bar" id="kpiBar"></div>
+  <div class="chart-section">
+    <h2>Adoption Curve — All Scenarios</h2>
+    <div class="chart-wrap"><canvas id="adoptionChart"></canvas></div>
+  </div>
+  <div class="bottom-grid">
+    <div class="network-section">
+      <h2>Organisation Network — <span id="netLabel">Select a scenario</span></h2>
+      <canvas id="networkCanvas"></canvas>
+    </div>
+    <div class="dept-section">
+      <h2>Adoption by Department</h2>
+      <div id="deptBars"></div>
+    </div>
+  </div>
+  <div class="insight-box" id="insightBox">
+    <strong>Key Insight</strong>
+    Select a scenario above to see the analysis.
+  </div>
+  <div class="method-toggle">
+    <button onclick="document.getElementById('methodContent').classList.toggle('show')">Methodology & About</button>
+  </div>
+  <div class="method-content" id="methodContent">
+    <h3>What is this?</h3>
+    A decision-support simulation comparing three strategies for rolling out an internal AI tool in a banking organisation. 100 synthetic employees interact through a social network, and their opinions evolve over 50 time steps based on peer influence, management pressure, and training.
+    <h3>How does it work?</h3>
+    The model uses Modified Friedkin-Johnsen opinion dynamics. Each agent has an innate opinion (anchoring point) and a susceptibility to external influence. Three channels affect opinions: peer influence through the social network, a decaying management signal, and ramping training effects. Champions amplify peer influence by 2.5x. Training permanently shifts innate opinions upward (accumulated learning). Change fatigue dampens management and training effects.
+    <h3>Data sources</h3>
+    The synthetic workforce is calibrated on real German labor market data from Bundesagentur für Arbeit (September 2025, Insurance & Finance sector). Demographics, roles, and departments reflect actual workforce composition patterns.
+    <h3>Disclaimer</h3>
+    This is an illustrative simulation for decision support, not a prediction of actual outcomes. Synthetic data only — not representative of any real organisation's workforce.
+    <h3>Built by</h3>
+    Edoardo Miozzi — M.Sc. Management, University of Mannheim 2025.<br>
+    Framework: Agent-Based Modelling with Friedkin-Johnsen Opinion Dynamics.<br>
+    Stack: Python (NetworkX, Mesa concepts), Chart.js, vanilla JS.
+  </div>
+</div>
+
+<div class="footer">
+  AI Change Radar — Built by Edoardo Miozzi | University of Mannheim, M.Sc. Management 2025<br>
+  Illustrative simulation for decision support. Not representative of any real organisation.
+</div>
+
+<script>
+// =====================================================================
+// AI Change Radar — Frontend
+// =====================================================================
+
+let DATA = null;
+let chart = null;
+let activeScenario = 'full_alignment';
+
+const INSIGHTS = {
+  top_down: "Top-down mandates create a spike of compliance — adoption peaks near 99% within days. But without training or internal champions, the effect is unsustainable. By step 50, adoption crashes to 41%. Only IT and Data departments retain adoption; traditional departments like Corporate Banking fall to 19%. The announcement creates motion, not commitment.",
+  grassroots: "Champion-based strategies show a fundamentally different curve: slow onset, sustained growth. The 10 trained champions (selected by influence score) gradually convert their network neighbours. By step 50, adoption reaches 82% across all departments — including traditionally resistant areas. The cost: patience. The first 10 steps show only modest gains.",
+  full_alignment: "When all three levers are activated — sustained management support, broad training, and 15% champions — adoption reaches 93% and holds. Every department exceeds 85%. This strategy costs the most upfront but delivers 2.3x the final adoption of a top-down mandate. The key insight: the three channels are not additive but multiplicative."
+};
+
+async function init() {
+  try {
+    const resp = await fetch('precomputed_results.json');
+    DATA = await resp.json();
+    renderScenarioCards();
+    renderChart();
+    selectScenario('full_alignment');
+  } catch(e) {
+    document.querySelector('.container').innerHTML = '<div class="loading">Loading data... Make sure precomputed_results.json is in the same directory.</div>';
+  }
+}
+
+function renderScenarioCards() {
+  const el = document.getElementById('scenarioCards');
+  const order = ['top_down', 'grassroots', 'full_alignment'];
+  el.innerHTML = order.map(key => {
+    const s = DATA.scenarios[key];
+    const k = s.kpis;
+    return `<div class="scenario-card" id="card-${key}" onclick="selectScenario('${key}')">
+      <h3><span class="dot" style="background:${s.color}"></span>${s.scenario_name}</h3>
+      <div class="desc">${s.description.substring(0, 120)}...</div>
+      <div class="adopt-num">${k.final_adoption_pct}%</div>
+      <div class="adopt-label">Final Adoption Rate</div>
+    </div>`;
+  }).join('');
+}
+
+function renderChart() {
+  const ctx = document.getElementById('adoptionChart').getContext('2d');
+  const labels = Array.from({length: 51}, (_, i) => i);
+  const order = ['top_down', 'grassroots', 'full_alignment'];
+
+  const datasets = order.map(key => {
+    const s = DATA.scenarios[key];
+    return {
+      label: s.scenario_name,
+      data: s.adoption_curve,
+      borderColor: s.color,
+      backgroundColor: s.color + '15',
+      borderWidth: 2.5,
+      pointRadius: 0,
+      pointHoverRadius: 5,
+      tension: 0.3,
+      fill: false,
+    };
+  });
+
+  // Threshold line
+  datasets.push({
+    label: 'Adoption Threshold (70%)',
+    data: Array(51).fill(70),
+    borderColor: '#CBD5E1',
+    borderWidth: 1,
+    borderDash: [6, 4],
+    pointRadius: 0,
+    fill: false,
+  });
+
+  chart = new Chart(ctx, {
+    type: 'line',
+    data: { labels, datasets },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: { position: 'bottom', labels: { usePointStyle: true, padding: 20, font: { size: 12 } } },
+        tooltip: { callbacks: { label: ctx => `${ctx.dataset.label}: ${ctx.parsed.y}%` } },
+      },
+      scales: {
+        x: { title: { display: true, text: 'Time Steps (weeks)', font: { size: 12 } }, grid: { display: false } },
+        y: { title: { display: true, text: 'Adoption Rate (%)', font: { size: 12 } }, min: 0, max: 100, grid: { color: '#F0F0F0' } },
+      },
+    },
+  });
+}
+
+function selectScenario(key) {
+  activeScenario = key;
+
+  // Update card selection
+  document.querySelectorAll('.scenario-card').forEach(c => c.classList.remove('active'));
+  document.getElementById(`card-${key}`).classList.add('active');
+
+  const s = DATA.scenarios[key];
+  const k = s.kpis;
+
+  // Update KPIs
+  document.getElementById('kpiBar').innerHTML = `
+    <div class="kpi-box"><div class="kpi-value" style="color:${s.color}">${k.final_adoption_pct}%</div><div class="kpi-label">Final Adoption</div></div>
+    <div class="kpi-box"><div class="kpi-value">${k.peak_adoption_pct}%</div><div class="kpi-label">Peak (Step ${k.peak_step})</div></div>
+    <div class="kpi-box"><div class="kpi-value">${k.enthusiast_count}</div><div class="kpi-label">Enthusiasts (>80%)</div></div>
+    <div class="kpi-box"><div class="kpi-value">${k.resistant_count}</div><div class="kpi-label">Resistant (<40%)</div></div>
+  `;
+
+  // Update dept bars
+  const depts = Object.entries(k.dept_adoption_rates).sort((a, b) => b[1] - a[1]);
+  document.getElementById('deptBars').innerHTML = depts.map(([dept, rate]) =>
+    `<div class="dept-bar-row">
+      <div class="dept-bar-label">${dept}</div>
+      <div class="dept-bar-track">
+        <div class="dept-bar-fill" style="width:${rate}%;background:${s.color}"></div>
+        <div class="dept-bar-val">${rate}%</div>
+      </div>
+    </div>`
+  ).join('');
+
+  // Update insight
+  document.getElementById('insightBox').innerHTML = `<strong>Key Insight — ${s.scenario_name}</strong>${INSIGHTS[key]}`;
+
+  // Update network
+  document.getElementById('netLabel').textContent = s.scenario_name;
+  drawNetwork(key);
+
+  // Highlight active line in chart
+  if (chart) {
+    const order = ['top_down', 'grassroots', 'full_alignment'];
+    order.forEach((k, i) => {
+      chart.data.datasets[i].borderWidth = k === key ? 4 : 1.5;
+      chart.data.datasets[i].borderColor = k === key ? DATA.scenarios[k].color : DATA.scenarios[k].color + '40';
+    });
+    chart.update();
+  }
+}
+
+function drawNetwork(scenarioKey) {
+  const canvas = document.getElementById('networkCanvas');
+  const ctx = canvas.getContext('2d');
+  const rect = canvas.getBoundingClientRect();
+  canvas.width = rect.width * 2;
+  canvas.height = rect.height * 2;
+  ctx.scale(2, 2);
+  const W = rect.width;
+  const H = rect.height;
+  ctx.clearRect(0, 0, W, H);
+
+  const agents = DATA.agents;
+  const edges = DATA.edges;
+  const scenario = DATA.scenarios[scenarioKey];
+  const finalOps = scenario.final_opinions;
+  const champions = new Set(scenario.champions);
+
+  // Scale positions to canvas
+  const xs = agents.map(a => a.x);
+  const ys = agents.map(a => a.y);
+  const minX = Math.min(...xs), maxX = Math.max(...xs);
+  const minY = Math.min(...ys), maxY = Math.max(...ys);
+  const pad = 30;
+  const scaleX = v => pad + (v - minX) / (maxX - minX) * (W - 2 * pad);
+  const scaleY = v => pad + (v - minY) / (maxY - minY) * (H - 2 * pad);
+
+  const positions = agents.map(a => ({ x: scaleX(a.x), y: scaleY(a.y) }));
+
+  // Draw edges
+  ctx.strokeStyle = 'rgba(200, 210, 220, 0.3)';
+  ctx.lineWidth = 0.5;
+  edges.forEach(e => {
+    ctx.beginPath();
+    ctx.moveTo(positions[e.source].x, positions[e.source].y);
+    ctx.lineTo(positions[e.target].x, positions[e.target].y);
+    ctx.stroke();
+  });
+
+  // Draw nodes
+  agents.forEach((a, i) => {
+    const op = finalOps[i];
+    const isChamp = champions.has(a.id);
+    const r = isChamp ? 7 : 4.5;
+
+    // Color: red (low) -> yellow (mid) -> green (high)
+    let color;
+    if (op < 0.5) {
+      const t = op / 0.5;
+      color = `rgb(${Math.round(231*(1-t) + 243*t)}, ${Math.round(76*(1-t) + 156*t)}, ${Math.round(60*(1-t) + 18*t)})`;
+    } else {
+      const t = (op - 0.5) / 0.5;
+      color = `rgb(${Math.round(243*(1-t) + 39*t)}, ${Math.round(156*(1-t) + 174*t)}, ${Math.round(18*(1-t) + 96*t)})`;
+    }
+
+    // Champion ring
+    if (isChamp) {
+      ctx.beginPath();
+      ctx.arc(positions[i].x, positions[i].y, r + 3, 0, Math.PI * 2);
+      ctx.strokeStyle = '#FFD700';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+    }
+
+    ctx.beginPath();
+    ctx.arc(positions[i].x, positions[i].y, r, 0, Math.PI * 2);
+    ctx.fillStyle = color;
+    ctx.fill();
+  });
+
+  // Legend
+  ctx.font = '11px -apple-system, sans-serif';
+  ctx.fillStyle = '#6B7280';
+  const ly = H - 15;
+  ctx.fillText('● Resistant', 10, ly);
+  ctx.fillStyle = '#E74C3C'; ctx.fillRect(10, ly - 10, 8, 8);
+  ctx.fillStyle = '#6B7280'; ctx.fillText('● Neutral', 90, ly);
+  ctx.fillStyle = '#F39C12'; ctx.fillRect(90, ly - 10, 8, 8);
+  ctx.fillStyle = '#6B7280'; ctx.fillText('● Adopted', 160, ly);
+  ctx.fillStyle = '#27AE60'; ctx.fillRect(160, ly - 10, 8, 8);
+  ctx.fillStyle = '#6B7280'; ctx.fillText('◎ Champion', 240, ly);
+  ctx.fillStyle = '#FFD700'; ctx.fillRect(240, ly - 10, 8, 8);
+}
+
+// Init
+window.addEventListener('DOMContentLoaded', init);
+window.addEventListener('resize', () => { if (activeScenario) drawNetwork(activeScenario); });
+</script>
+</body>
+</html>
